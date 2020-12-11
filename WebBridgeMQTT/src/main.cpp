@@ -1,23 +1,6 @@
-//************************************************************
-// this is a MqttBroker example that uses the painlessMesh library
-//
-// connect to a another network and relay messages from a MQTT broker to the nodes of the mesh network.
-//
-// - To send a message to a mesh node, you can publish it to "painlessMesh/to/NNNN" where NNNN equals the nodeId.
-// - To broadcast a message to all nodes in the mesh you can publish it to "painlessMesh/to/broadcast".
-// - When you publish "getNodes" to "painlessMesh/to/gateway" you receive the mesh topology as JSON
-//
-// - Every message from the mesh which is sent to the gateway node will be published to "painlessMesh/from/NNNN" where NNNN
-//   is the nodeId from which the packet was sent.
-//
-// - The web server has only 3 pages:
-//     ip_address_of_the_bridge      to broadcast messages to all nodes
-//     ip_address_of_the_bridge/map  to show the topology of the network
-//     ip_address_of_the_bridge/scan to get the topology of the network ( json format )
-//
-//************************************************************
-//#include <Arduino.h>
-#include "painlessMesh.h"
+//DEBUGGING OR SERIAL HAS AN BUG IN SOFTAP
+
+#include "namedMesh.h"
 #include "PubSubClient.h"
 #include "Button2.h"
 #ifdef ESP8266
@@ -42,7 +25,7 @@
 
 Scheduler userScheduler;   // to control your personal task
 
-painlessMesh  mesh;
+namedMesh  mesh;
 WiFiClient wifiClient;
 AsyncWebServer server(80);
 
@@ -54,6 +37,7 @@ IPAddress getlocalIP();
 IPAddress myIP(0,0,0,0);
 IPAddress myAPIP(0,0,0,0);
 
+String nodeName = "Gateway";
 
 
 // hivemq pubblic broker address and port
@@ -78,8 +62,6 @@ uint32_t nexttime=0;
 uint8_t  initialized=0;
 
 
-//Task taskSendMessage( TASK_SECOND * 1 , TASK_FOREVER, &sendMessage );
-
 
 
 // messages received from the mqtt broker
@@ -91,7 +73,7 @@ void mqttCallback(char* topic, uint8_t* payload, unsigned int length)
   String msg = String(cleanPayload);
   free(cleanPayload);
 
-  Serial.printf("mc t:%s  p:%s\n", topic, payload);
+  // Serial.printf("mc t:%s  p:%s\n", topic, payload);
   
   String targetStr = String(topic).substring(strlen(SUBSCRIBESUFFIX));
   if(targetStr == "gateway")
@@ -140,7 +122,7 @@ void mqttCallback(char* topic, uint8_t* payload, unsigned int length)
 // messages received from painless mesh network
 void receivedCallback( const uint32_t &from, const String &msg ) 
   {
-  Serial.printf("bridge: Received from %u msg=%s\n", from, msg.c_str());
+  // Serial.printf("bridge: Received from %u msg=%s\n", from, msg.c_str());
   String topic = PUBPLISHSUFFIX + String(from);
   mqttClient.publish(topic.c_str(), msg.c_str());
   }
@@ -150,8 +132,8 @@ void receivedCallback( const uint32_t &from, const String &msg )
 
 void newConnectionCallback(uint32_t nodeId) 
   {
-  Serial.printf("--> Start: New Connection, nodeId = %u\n", nodeId);
-  Serial.printf("--> Start: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
+  // Serial.printf("--> Start: New Connection, nodeId = %u\n", nodeId);
+  // Serial.printf("--> Start: New Connection, %s\n", mesh.subConnectionJson(true).c_str());
   }
 
 
@@ -159,7 +141,7 @@ void newConnectionCallback(uint32_t nodeId)
 
 void changedConnectionCallback() 
   {
-  Serial.printf("Changed connections\n");
+  // Serial.printf("Changed connections\n");
 
   nodes = mesh.getNodeList();
   Serial.printf("Num nodes: %d\n", nodes.size());
@@ -167,7 +149,7 @@ void changedConnectionCallback()
   SimpleList<uint32_t>::iterator node = nodes.begin();
   while (node != nodes.end()) 
     {
-    Serial.printf(" %u", *node);
+    // Serial.printf(" %u", *node);
     node++;
     }
   Serial.println();
@@ -179,7 +161,7 @@ void changedConnectionCallback()
 
 void nodeTimeAdjustedCallback(int32_t offset) 
   {
-  Serial.printf("Adjusted time %u Offset = %d\n", mesh.getNodeTime(),offset);
+  // Serial.printf("Adjusted time %u Offset = %d\n", mesh.getNodeTime(),offset);
   }
 
 
@@ -187,7 +169,7 @@ void nodeTimeAdjustedCallback(int32_t offset)
 
 void onNodeDelayReceived(uint32_t nodeId, int32_t delay)
   {
-  Serial.printf("Delay from node:%u delay = %d\n", nodeId,delay);
+  // Serial.printf("Delay from node:%u delay = %d\n", nodeId,delay);
   }
 
 
@@ -206,19 +188,19 @@ void reconnect()
   // Loop until we're reconnected
   while (!mqttClient.connected()) 
     {
-    Serial.println("Attempting MQTT connection...");    
+    // Serial.println("Attempting MQTT connection...");    
     // Attemp to connect
     if (mqttClient.connect(/*MQTT_CLIENT_NAME*/MAC)) 
       {
-      Serial.println("Connected");  
+      // Serial.println("Connected");  
       mqttClient.publish(PUBPLISHFROMGATEWAYSUFFIX,"Ready!");
       mqttClient.subscribe(SUBSCRIBESUFFIX "#");
       } 
     else
       {
-      Serial.print("Failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" try again in 2 seconds");
+      // Serial.print("Failed, rc=");
+      // Serial.print(mqttClient.state());
+      // Serial.println(" try again in 2 seconds");
       // Wait 2 seconds before retrying
       delay(2000);
       mesh.update();
@@ -254,16 +236,17 @@ String scanprocessor(const String& var)
 
 void setup() 
   {
-  Serial.begin(115200);
+  // Serial.begin(115200);
 
 
   //mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | MSG_TYPES | REMOTE ); // all types on except GENERAL
   //mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
-  mesh.setDebugMsgTypes( ERROR | STARTUP | CONNECTION );  // set before init() so that you can see startup messages
+  // mesh.setDebugMsgTypes( ERROR | STARTUP | CONNECTION );  // set before init() so that you can see startup messages
 
   // Channel set to 1. Make sure to use the same channel for your mesh and for you other
   // network (STATION_SSID)
   mesh.init( MESH_PREFIX, MESH_PASSWORD, MESH_PORT, WIFI_AP_STA );
+  mesh.setName( nodeName );
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
   mesh.onChangedConnections(&changedConnectionCallback);

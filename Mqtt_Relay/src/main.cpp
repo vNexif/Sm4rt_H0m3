@@ -1,19 +1,20 @@
-//************************************************************
-// this is a simple example that uses the painlessMesh library
-//
-// 1. sends a silly message to every node on the mesh at a random time between 1 and 5 seconds
-// 2. prints anything it receives to Serial.print
-//
-//
-//************************************************************
-#include "painlessMesh.h"
+//DEBUGGING OR SERIAL HAS AN BUG IN SOFTAP
+
+#include "namedMesh.h"
+#include "DHT.h"
 
 #define   MESH_PREFIX     "Blink"
 #define   MESH_PASSWORD   "MokraWoda"
 #define   MESH_PORT       5555
+#define   HOSTNAME         "MQTT_Temp_Relay"
+
+//DHT Defines
+#define DHTPIN 4
+#define DHTTYPE DHT11
 
 const int Relay1 = 23;
 const int Relay2 = 22;
+String nodeName = "Temp_Relay";
 
 // #define PUBPLISHSUFFIX             "painlessMesh/from/"
 // #define SUBSCRIBESUFFIX            "painlessMesh/to/"
@@ -21,17 +22,36 @@ const int Relay2 = 22;
 // #define PUBPLISHFROMGATEWAYSUFFIX  PUBPLISHSUFFIX "gateway"
 
 Scheduler userScheduler; // to control your personal task
-painlessMesh  mesh;
+namedMesh  mesh;
+DHT dht(DHTPIN, DHTTYPE);
 
 // User stub
 void sendMessage() ; // Prototype so PlatformIO doesn't complain
+void fetchDht() ;
+
+float h = 0.0;
+float t = 0.0;
+float hic = 0.0;
 
 
+Task taskFetchDht( TASK_SECOND * 10, TASK_FOREVER, &fetchDht );
 Task taskSendMessage( TASK_SECOND * 10 , TASK_FOREVER, &sendMessage );
 
+void fetchDht(){
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+  hic = dht.computeHeatIndex(t, h, false);
+}
+
 void sendMessage() {
-  String msg = "Hello from relay node ";
-  msg += mesh.getNodeId();
+    String msg = "The humidity is : ";
+  msg += h;
+  msg += "\n";
+  msg += "The temperature is :";
+  msg += t;
+  msg += "\n";
+  msg += "The calculated heat index is :";
+  msg += hic;
   mesh.sendSingle( 476456449 , msg );
 }
 
@@ -60,35 +80,42 @@ void receivedCallback( uint32_t from, String &msg ) {
 }
 
 void newConnectionCallback(uint32_t nodeId) {
-    Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
+    // Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
 }
 
 void changedConnectionCallback() {
-  Serial.printf("Changed connections\n");
+  // Serial.printf("Changed connections\n");
 }
 
 void nodeTimeAdjustedCallback(int32_t offset) {
-    Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
+    // Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
 }
 
 void setup() {
-  Serial.begin(115200);
+  // Serial.begin(115200);
 
-  mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
+  // mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
   // mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
 
   mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
+  mesh.setName( nodeName );
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
   mesh.onChangedConnections(&changedConnectionCallback);
   mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+  mesh.setHostname(HOSTNAME);
+
+  dht.begin();
 
   pinMode(Relay1, OUTPUT);
   pinMode(Relay2, OUTPUT);
 
-  
+  userScheduler.addTask( taskFetchDht );
+  taskFetchDht.enable();
+
   userScheduler.addTask( taskSendMessage );
-  // taskSendMessage.enable();
+  taskSendMessage.enable();
+
 
 }
 
