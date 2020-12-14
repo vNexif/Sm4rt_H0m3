@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Pio CI
+name: Mqtt_Relay
 
 # Controls when the action will run. 
 on:
@@ -46,5 +46,5 @@ jobs:
         pip install --upgrade platformio
     - name: Install library dependencies
       run: pio lib -g install 1
-    - name: Run Relay
+    - name: Run Mqtt_Relay
       run: pio run -e esp32doit-devkit-v1
