@@ -27,14 +27,8 @@ function App() {
         try {
 
             note = JSON.parse(message);
-            // console.log(note);
-            const obj = {
-                temperature: note[0].value,
-                humidity: note[1].value,
-                heatIndex: note[2].value
-            }
 
-            setData(obj);
+            setData(note);
             //THIS SHIT IS NOT NEEDEED BUI
             // client.end();
         } catch (e) {
