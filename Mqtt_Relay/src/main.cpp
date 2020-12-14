@@ -4,6 +4,8 @@
 #include "DHT.h"
 #include "ArduinoJson.h"
 
+//put those values into .env or something like that it's not secure to reveal those values to others
+
 #define   MESH_PREFIX     "Blink"
 #define   MESH_PASSWORD   "MokraWoda"
 #define   MESH_PORT       5555
@@ -47,18 +49,15 @@ void serialize_JSON(){
 
   doc.clear();
   output.clear();
-
+  // Object["key"] = value
   JsonObject Temp = doc.createNestedObject();
-    Temp["key"] = "Temperature";
-    Temp["value"] = t;
-  
+    Temp["temperature"] = t;
+
   JsonObject Humid = doc.createNestedObject();
-    Humid["key"] = "Humidity";
-    Humid["value"] = h;
+    Humid["humidity"] = h;
 
   JsonObject HIC = doc.createNestedObject();
-    HIC["key"] = "HIC";
-    HIC["value"] = hic;
+    HIC["heatIndex"] = hic;
 
   serializeJson( doc, output );
 }
