@@ -2,6 +2,7 @@
 
 #include "namedMesh.h"
 #include "DHT.h"
+#include "ArduinoJson.h"
 
 #define   MESH_PREFIX     "Blink"
 #define   MESH_PASSWORD   "MokraWoda"
@@ -16,7 +17,7 @@ const int Relay1 = 23;
 const int Relay2 = 22;
 String nodeName = "Temp_Relay";
 
-// #define PUBPLISHSUFFIX             "painlessMesh/from/"
+// #define PUBPLISHSUFFIX             "painlessMesh/from/#"
 // #define SUBSCRIBESUFFIX            "painlessMesh/to/"
 
 // #define PUBPLISHFROMGATEWAYSUFFIX  PUBPLISHSUFFIX "gateway"
@@ -33,31 +34,54 @@ float h = 0.0;
 float t = 0.0;
 float hic = 0.0;
 
+const int capacity = JSON_ARRAY_SIZE(3) + 3*JSON_OBJECT_SIZE(2);
+StaticJsonDocument<capacity> doc;
 
-Task taskFetchDht( TASK_SECOND * 10, TASK_FOREVER, &fetchDht );
-Task taskSendMessage( TASK_SECOND * 10 , TASK_FOREVER, &sendMessage );
+String output;
+
+
+// Task taskFetchDht( TASK_SECOND * 10, TASK_FOREVER, &fetchDht );
+// Task taskSendMessage( TASK_SECOND * 10 , TASK_FOREVER, &sendMessage );
+
+void serialize_JSON(){
+
+  doc.clear();
+  output.clear();
+
+  JsonObject Temp = doc.createNestedObject();
+    Temp["key"] = "Temperature";
+    Temp["value"] = t;
+  
+  JsonObject Humid = doc.createNestedObject();
+    Humid["key"] = "Humidity";
+    Humid["value"] = h;
+
+  JsonObject HIC = doc.createNestedObject();
+    HIC["key"] = "HIC";
+    HIC["value"] = hic;
+
+  serializeJson( doc, output );
+}
 
 void fetchDht(){
   h = dht.readHumidity();
   t = dht.readTemperature();
   hic = dht.computeHeatIndex(t, h, false);
+  serialize_JSON();
 }
 
 void sendMessage() {
-    String msg = "The humidity is : ";
-  msg += h;
-  msg += "\n";
-  msg += "The temperature is :";
-  msg += t;
-  msg += "\n";
-  msg += "The calculated heat index is :";
-  msg += hic;
-  mesh.sendSingle( 476456449 , msg );
+  mesh.sendSingle( 476456449 , output );
 }
 
 // Needed for painless library
 void receivedCallback( uint32_t from, String &msg ) {
   if ( from == 476456449 ){
+    if (msg == "getDHT") {
+      fetchDht();
+      mesh.sendBroadcast(output);
+
+    }
     if ( msg == "ON1" ){
       digitalWrite(Relay1, LOW);
       mesh.sendSingle( 76456449 , "Relay 1 state: ON" );
@@ -92,7 +116,7 @@ void nodeTimeAdjustedCallback(int32_t offset) {
 }
 
 void setup() {
-  // Serial.begin(115200);
+  Serial.begin(115200);
 
   // mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
   // mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
@@ -110,11 +134,11 @@ void setup() {
   pinMode(Relay1, OUTPUT);
   pinMode(Relay2, OUTPUT);
 
-  userScheduler.addTask( taskFetchDht );
-  taskFetchDht.enable();
+  // userScheduler.addTask( taskFetchDht );
+  // taskFetchDht.enable();
 
-  userScheduler.addTask( taskSendMessage );
-  taskSendMessage.enable();
+  // userScheduler.addTask( taskSendMessage );
+  // taskSendMessage.enable();
 
 
 }
