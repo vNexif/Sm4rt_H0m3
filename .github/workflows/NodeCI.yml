@@ -4,16 +4,9 @@
 name: NodeCI
 
 on:
-  push:
-    branches: 
-      - master
-      - JSON
-      - main
-
   pull_request:
     branches: 
       - master
-      - JSON
       - main
 
 jobs:
