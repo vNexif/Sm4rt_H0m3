@@ -3,146 +3,184 @@
 #include "namedMesh.h"
 #include "DHT.h"
 #include "ArduinoJson.h"
-
-//put those values into .env or something like that it's not secure to reveal those values to others
-
-#define   MESH_PREFIX     "Blink"
-#define   MESH_PASSWORD   "MokraWoda"
-#define   MESH_PORT       5555
-#define   HOSTNAME         "MQTT_Temp_Relay"
-
-//DHT Defines
-#define DHTPIN 4
-#define DHTTYPE DHT11
-
-const int Relay1 = 23;
-const int Relay2 = 22;
-String nodeName = "Temp_Relay";
-
-// #define PUBPLISHSUFFIX             "painlessMesh/from/#"
-// #define SUBSCRIBESUFFIX            "painlessMesh/to/"
-
-// #define PUBPLISHFROMGATEWAYSUFFIX  PUBPLISHSUFFIX "gateway"
+#include ".env.h"
 
 Scheduler userScheduler; // to control your personal task
-namedMesh  mesh;
+namedMesh mesh;
 DHT dht(DHTPIN, DHTTYPE);
 
 // User stub
-void sendMessage() ; // Prototype so PlatformIO doesn't complain
-void fetchDht() ;
+void sendMessage(); // Prototype so PlatformIO doesn't complain
+void fetchDht();
+void send_DHT();
+void get_Functions();
+void get_Help();
 
-float h = 0.0;
-float t = 0.0;
-float hic = 0.0;
-
-const int capacity = JSON_ARRAY_SIZE(3) + 3*JSON_OBJECT_SIZE(2);
-StaticJsonDocument<capacity> doc;
-
-String output;
-
-
-// Task taskFetchDht( TASK_SECOND * 10, TASK_FOREVER, &fetchDht );
+// Task t1(TASK_IMMEDIATE, TASK_SCHEDULE, &fetchDht, &userScheduler);
 // Task taskSendMessage( TASK_SECOND * 10 , TASK_FOREVER, &sendMessage );
 
-void serialize_JSON(){
+//Functions
+std::map<std::string, bool> node_function =
+    {
+        {"temperature", true},
+        {"humidity", true},
+        {"hic", true},
+        {"bar", false},
+        {"mov", false}};
 
-  doc.clear();
-  output.clear();
-  // Object["key"] = value
-  JsonObject Temp = doc.createNestedObject();
-    Temp["temperature"] = t;
-
-  JsonObject Humid = doc.createNestedObject();
-    Humid["humidity"] = h;
-
-  JsonObject HIC = doc.createNestedObject();
-    HIC["heatIndex"] = hic;
-
-  serializeJson( doc, output );
+void get_Help()
+{ 
+  String s_help = String("To get my functionality send me 'getFunc' \nTo get my dht sensor data send me 'getDHT' \nTo turn ON/OFF the relay send me 'ON|OFF'(1|2)");
+  mesh.sendSingle(gatewayName, s_help);
 }
 
-void fetchDht(){
-  h = dht.readHumidity();
-  t = dht.readTemperature();
-  hic = dht.computeHeatIndex(t, h, false);
-  serialize_JSON();
+void get_Functions()
+{
+  DynamicJsonDocument j_funcs(4096);
+  String js_funcs;
+  j_funcs.clear(), js_funcs.clear();
+
+  JsonObject meta = j_funcs.createNestedObject("nodeMeta");
+  meta["nodeID"] = mesh.getNodeId();
+  meta["nodeName"] = mesh.getName();
+  JsonObject meta_Place = meta.createNestedObject("nodePlace");
+  meta_Place["area"] = "NexRoom";
+  meta_Place["place"] = "Magiczna_Szafa";
+
+  JsonObject node_func = j_funcs.createNestedObject("nodeFunctions");
+  node_func["temperature"] = node_function["temperature"];
+  node_func["humidity"] = node_function["humidity"];
+  node_func["hic"] = node_function["hic"];
+  node_func["barometer"] = node_function["bar"];
+  node_func["movement"] = node_function["mov"];
+
+  serializeJson(j_funcs, js_funcs);
+  mesh.sendSingle(gatewayName, js_funcs);
 }
 
-void sendMessage() {
-  mesh.sendSingle( 476456449 , output );
+void send_DHT(float temperature, float humidity, float hic)
+{
+  DynamicJsonDocument j_dht(4096);
+  String js_dht;
+  Serial.println("Clearing JSON buffer");
+  j_dht.clear(), js_dht.clear();
+
+  JsonObject data = j_dht.createNestedObject("data");
+  data["temperature"] = temperature;
+  data["humidity"] = humidity;
+  data["heatIndex"] = hic;
+
+  serializeJson(j_dht, js_dht);
+  mesh.sendSingle( gatewayName, js_dht);
+  // Serial.println("JSON GUT");
+}
+
+void fetchDht()
+{
+  float humidity = {0.0}, temperature = {0.0}, hic = {0.0};
+  Serial.println("Fetching dHT...");
+  humidity = dht.readHumidity();
+  temperature = dht.readTemperature();
+  hic = dht.computeHeatIndex(temperature, humidity, false);
+  send_DHT(temperature, humidity, hic);
+}
+
+void sendMessage()
+{
 }
 
 // Needed for painless library
-void receivedCallback( uint32_t from, String &msg ) {
-  if ( from == 476456449 ){
-    if (msg == "getDHT") {
+void receivedCallback(String &from, String &msg)
+{
+  if (from == "Gateway")
+  {
+    if (msg == "?")
+    {
+      get_Help();
+    }
+    if (msg == "getFunc")
+    {
+      get_Functions();
+    }
+    if (msg == "getDHT")
+    {
       fetchDht();
-      mesh.sendBroadcast(output);
-
     }
-    if ( msg == "ON1" ){
+    if (msg == "ON1")
+    {
       digitalWrite(Relay1, LOW);
-      mesh.sendSingle( 76456449 , "Relay 1 state: ON" );
+      String reply = String ("Relay 1 state: ON");
+      mesh.sendSingle(gatewayName, reply);
     }
-    if ( msg == "OFF1" ){
+    if (msg == "OFF1")
+    {
       digitalWrite(Relay1, HIGH);
-      mesh.sendSingle( 76456449 , "Relay 1 state: OFF" );
+      String reply = String ("Relay 1 state: OFF");
+      mesh.sendSingle(gatewayName, reply);
     }
-    if ( msg == "ON2" ){
+    if (msg == "ON2")
+    {
       digitalWrite(Relay2, LOW);
-      mesh.sendSingle( 76456449 , "Relay 2 state: ON" );
+      String reply = String ("Relay 2 state: ON");
+      mesh.sendSingle(gatewayName, reply);
     }
-    if ( msg == "OFF2" ){
+    if (msg == "OFF2")
+    {
       digitalWrite(Relay2, HIGH);
-      mesh.sendSingle( 76456449 , "Relay 2 state: OFF" );
+      String reply = String ("Relay 2 state: OFF");
+      mesh.sendSingle(gatewayName, reply);
     }
   }
-    Serial.println(msg);
+  Serial.println(msg);
   // Serial.printf("startHere: Received from %u msg=%s\n", from, msg.c_str());
 }
 
-void newConnectionCallback(uint32_t nodeId) {
-    // Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
+void newConnectionCallback(uint32_t nodeId)
+{
+  // Serial.printf("--> startHere: New Connection, nodeId = %u\n", nodeId);
 }
 
-void changedConnectionCallback() {
+void changedConnectionCallback()
+{
   // Serial.printf("Changed connections\n");
 }
 
-void nodeTimeAdjustedCallback(int32_t offset) {
-    // Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
+void nodeTimeAdjustedCallback(int32_t offset)
+{
+  // Serial.printf("Adjusted time %u. Offset = %d\n", mesh.getNodeTime(),offset);
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
 
   // mesh.setDebugMsgTypes( ERROR | MESH_STATUS | CONNECTION | SYNC | COMMUNICATION | GENERAL | MSG_TYPES | REMOTE ); // all types on
   // mesh.setDebugMsgTypes( ERROR | STARTUP );  // set before init() so that you can see startup messages
 
-  mesh.init( MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT );
-  mesh.setName( nodeName );
+  mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
   mesh.onChangedConnections(&changedConnectionCallback);
   mesh.onNodeTimeAdjusted(&nodeTimeAdjustedCallback);
+  mesh.setName(nodeName);
   mesh.setHostname(HOSTNAME);
+  mesh.setContainsRoot(true);
 
   dht.begin();
 
   pinMode(Relay1, OUTPUT);
   pinMode(Relay2, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 
   // userScheduler.addTask( taskFetchDht );
   // taskFetchDht.enable();
 
   // userScheduler.addTask( taskSendMessage );
   // taskSendMessage.enable();
-
-
 }
 
-void loop() {
+void loop()
+{
   // it will run the user scheduler as well
   mesh.update();
 }
